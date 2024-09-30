@@ -71,7 +71,7 @@ fn bar() -> Int {
 - 局部变量绑定
 - 赋值
 - `return` 语句
-- 返回类型为 `unit` 的任何表达式
+- 返回类型为 `Unit` 的任何表达式
 
 ## 函数
 
@@ -233,6 +233,37 @@ fn main {
 }
 ```
 
+#### 在提供可选参数时让编译器自动插入 `Some`
+
+许多可选参数的类型是 `T?`，默认值是 `None`。显式提供这种参数时，需要裹一层构造器 `Some`：
+
+```moonbit
+fn image(~width : Int? = None, ~height : Int? = None) -> Image { ... }
+fn main {
+  let img = image(width=Some(1920), height=Some(1080)) // 丑!
+  ...
+}
+```
+
+MoonBit 提供了一种特殊的可选参数来解决这个问题。可以用 `~label? : T` 来声明一个可选参数，这个可选参数的类型是 `T?`，默认值是 `None`。调用者显式提供这一参数时，MoonBit 会自动在参数上插入一层 `Some`：
+
+```moonbit
+fn image(~width? : Int, ~height? : Int) -> Image { ... }
+fn main {
+  let img = image(width=1920, height=1080) // 好多了!
+  ...
+}
+```
+
+不过，有时依然需要直接直接传递一个类型为 `T?` 的值，例如在转发一个可选参数时。为此，MoonBit 提供了一个语法 `label?=value`，表示直接把类型为 `T?` 的值 `value` 传递给参数 `label`。此外，`label?=label` 可以简写成 `~label?`：
+
+```moonbit
+fn image(~width? : Int, ~height? : Int) -> Image { ... }
+fn fixed_width_image(~height? : Int) -> Image {
+  image(width=1920, ~height?)
+}
+```
+
 ### 自动填充的参数
 
 MoonBit 能够自动在每次函数调用时填充某些特定类型的参数，例如函数调用在源码中的位置。要声明这种自动填充的参数，只需要使用 `_` 作为参数的默认值即可。如果在调用时没有提供这个参数，MoonBit 就会自动根据调用处的上下文填充这个参数。
@@ -285,6 +316,11 @@ if x == y {
 花括号用于在结果或 `else` 子句中组合表达式。
 
 注意，在 MoonBit 中，条件表达式总是返回一个值，其结果和 `else` 子句的返回值类型必须相同。
+一个配合条件表达式使用`let`绑定的例子：
+
+```moonbit
+let initial = if size < 1 { 1 } else { size }
+```
 
 ### While 循环
 
@@ -351,7 +387,7 @@ fn main {
   println(r2) //output: 7
 ```
 
-## For 循环
+### For 循环
 
 MoonBit 也支持 C 风格的 For 循环。关键字`for`后依次跟随以分号间隔的变量初始化子句、循环条件和更新子句。三者不需要使用圆括号包裹。
 例如下面的代码创建了一个新的变量绑定`i`, 它的作用域在整个循环中，且是不可变的。这更利于编写清晰的代码和推理：
@@ -488,6 +524,45 @@ fn main {
 }
 ```
 
+### 卫语句
+
+卫语句用于检查指定的不变量。如果不变量的条件满足，程序继续执行后续的语句并返回。
+如果条件不满足（即为假），则执行 `else` 块中的代码并返回它的求值结果（后续的语句会被跳过）。
+
+```moonbit
+guard index >= 0 && index < len else {
+  abort("Index out of range")
+}
+```
+
+`guard` 语句也支持模式匹配：下面的例子中`getProcessedText`假设输入的`path`指向的都是纯文本的资源，
+它使用卫语句保证这一不变量。相比于直接使用`match`语句，后续对`text`的处理过程可以少一层缩进。
+
+```moonbit
+enum Resource {
+  Folder(Array[String])
+  PlainText(String)
+  JsonConfig(Json)
+}
+
+fn getProcessedText(resources : Map[String, Resource], path : String) -> String!Error {
+  guard let Some(PlainText(text)) = resources[path] else {
+    None => fail!("\{path} not found")
+    Some(Folder(_)) => fail!("\{path} is a folder")
+    Some(JsonConfig(_)) => fail!("\{path} is a json config")
+  }
+  ...
+  process(text)
+}
+```
+
+当省略`else`的部分时，卫语句指定的条件不为真或者无法匹配时，程序终止。
+
+```moonbit
+guard condition // 相当于 guard condition else { panic() }
+guard let Some(x) = expr // 相当于 guard let Some(x) = expr else { _ => panic() }
+```
+
 ## 迭代器
 
 迭代器（Iterator）是一个用来遍历访问某个序列的元素的对象。传统面向对象语言（例如 Java），使用 `Iterator<T>` 和 `next()`
@@ -583,15 +658,15 @@ let e = not(a)
 
 MoonBit 支持整型和浮点类型：
 
-| 类型     | 描述                                           | 例子    |
-| -------- | ---------------------------------------------- | ------- |
-| `Int`    | 32 位有符号整数                                | `42`    |
-| `Int64`  | 64 位有符号整数                                | `1000L` |
-| `UInt`   | 32 位无符号整数                                | `14U`   |
-| `UInt64` | 64 位无符号整数                                | `14UL`  |
-| `Double` | 64 位浮点数，由 IEEE754 定义                   | `3.14`  |
-| `Float`  | 32 位单精度浮点数 ｜ `(3.14 : Float)`          |
-| `BigInt` | 表示任意大的整数 ｜ `10000000000000000000000N` |
+| 类型     | 描述                         | 例子                       |
+| -------- | ---------------------------- | -------------------------- |
+| `Int`    | 32 位有符号整数              | `42`                       |
+| `Int64`  | 64 位有符号整数              | `1000L`                    |
+| `UInt`   | 32 位无符号整数              | `14U`                      |
+| `UInt64` | 64 位无符号整数              | `14UL`                     |
+| `Double` | 64 位浮点数，由 IEEE754 定义 | `3.14`                     |
+| `Float`  | 32 位单精度浮点数            | `(3.14 : Float)`           |
+| `BigInt` | 表示任意大的整数             | `10000000000000000000000N` |
 
 MoonBit 支持的数字字面量，包括十进制、二进制、八进制和十六进制。
 
@@ -685,7 +760,7 @@ let zero = '\u{30}'
 let zero = '\u0030'
 ```
 
-### 字节
+### 字节（序列）
 
 在 MoonBit 中，字节字面量可以是一个 ASCII 字符或一个转义序列，它们被单引号`'`包围，并且前面有字符`b`。字节字面量的类型是 Byte。例如：
 
@@ -695,6 +770,16 @@ fn main {
   println(b1.to_int())
   let b2 = b'\xff'
   println(b2.to_int())
+}
+```
+
+`Bytes` 则是一个字节序列。类似于字节字面量，字节序列的字面量形式为 `b"..."`。例如：
+
+```moonbit live
+fn main {
+  let b1 : Bytes = b"abcd"
+  let b2 = b"\x61\x62\x63\x64"
+  println(b1 == b2) // true
 }
 ```
 

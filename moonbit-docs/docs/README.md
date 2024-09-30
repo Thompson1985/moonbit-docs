@@ -74,7 +74,7 @@ Statements include:
 - Local variable bindings
 - Assignments
 - `return` statements
-- Any expression whose return type is `unit`
+- Any expression whose return type is `Unit`
 
 ## Functions
 
@@ -232,6 +232,42 @@ fn init {
 }
 ```
 
+#### Automatically insert `Some` when supplying optional arguments
+
+It is quite often optional arguments have type `T?` with `None` as default value.
+In this case, passing the argument explicitly requires wrapping a `Some`:
+
+```moonbit
+fn image(~width : Int? = None, ~height : Int? = None) -> Image { ... }
+fn main {
+  let img = image(width=Some(1920), height=Some(1080)) // ugly!
+  ...
+}
+```
+
+Fortunately, MoonBit provides a special kind of optional arguments to solve this problem.
+Optional arguments declared with `~label? : T` has type `T?` and `None` as default value.
+When supplying this kind of optional argument directly, MoonBit will automatically insert a `Some`:
+
+```moonbit
+fn image(~width? : Int, ~height? : Int) -> Image { ... }
+fn main {
+  let img = image(width=1920, height=1080) // much better!
+  ...
+}
+```
+
+Sometimes, it is also useful to pass a value of type `T?` directly,
+for example when forwarding optional argument.
+MoonBit provides a syntax `label?=value` for this, with `~label?` being an abbreviation of `label?=label`:
+
+```moonbit
+fn image(~width? : Int, ~height? : Int) -> Image { ... }
+fn fixed_width_image(~height? : Int) -> Image {
+  image(width=1920, ~height?)
+}
+```
+
 ### Autofill arguments
 
 MoonBit supports filling specific types of arguments automatically at different call site, such as the source location of a function call.
@@ -286,7 +322,11 @@ if x == y {
 
 Curly brackets are used to group multiple expressions in the consequent or the else clause.
 
-Note that a conditional expression always returns a value in MoonBit, and the return values of the consequent and the else clause must be of the same type.
+Note that a conditional expression always returns a value in MoonBit, and the return values of the consequent and the else clause must be of the same type. Here is an example:
+
+```moonbit
+let initial = if size < 1 { 1 } else { size }
+```
 
 ### While loop
 
@@ -353,7 +393,7 @@ When there is an `else` clause, the `while` loop can also return a value. The re
   println(r2) //output: 7
 ```
 
-## For Loop
+### For Loop
 
 MoonBit also supports C-style For loops. The keyword `for` is followed by variable initialization clauses, loop conditions, and update clauses separated by semicolons. They do not need to be enclosed in parentheses.
 For example, the code below creates a new variable binding `i`, which has a scope throughout the entire loop and is immutable. This makes it easier to write clear code and reason about it:
@@ -476,6 +516,50 @@ fn main {
 }
 ```
 
+### Guard Statement
+
+The `guard` statement is used to check a specified invariant.
+If the condition of the invariant is satisfied, the program continues executing
+the subsequent statements and returns. If the condition is not satisfied (i.e., false),
+the code in the `else` block is executed and its evaluation result is returned (the subsequent statements are skipped).
+
+```moonbit
+guard index >= 0 && index < len else {
+  abort("Index out of range")
+}
+```
+
+The `guard` statement also supports pattern matching: in the following example,
+`getProcessedText` assumes that the input `path` points to resources that are all plain text,
+and it uses the `guard` statement to ensure this invariant. Compared to using
+a `match` statement, the subsequent processing of `text` can have one less level of indentation.
+
+```moonbit
+enum Resource {
+  Folder(Array[String])
+  PlainText(String)
+  JsonConfig(Json)
+}
+
+fn getProcessedText(resources : Map[String, Resource], path : String) -> String!Error {
+  guard let Some(PlainText(text)) = resources[path] else {
+    None => fail!("\{path} not found")
+    Some(Folder(_)) => fail!("\{path} is a folder")
+    Some(JsonConfig(_)) => fail!("\{path} is a json config")
+  }
+  ...
+  process(text)
+}
+```
+
+When the `else` part is omitted, the program terminates if the condition specified
+in the `guard` statement is not true or cannot be matched.
+
+```moonbit
+guard condition // equivalent to `guard condition else { panic() }`
+guard let Some(x) = expr // equivalent to `guard let Some(x) = expr else { _ => panic() }`
+```
+
 ## Iterator
 
 An iterator is an object that traverse through a sequence while providing access
@@ -592,15 +676,15 @@ let e = not(a)
 
 MoonBit have integer type and floating point type:
 
-| type     | description                                                                     | example |
-| -------- | ------------------------------------------------------------------------------- | ------- |
-| `Int`    | 32-bit signed integer                                                           | `42`    |
-| `Int64`  | 64-bit signed integer                                                           | `1000L` |
-| `UInt`   | 32-bit unsigned integer                                                         | `14U`   |
-| `UInt64` | 64-bit unsigned integer                                                         | `14UL`  |
-| `Double` | 64-bit floating point, defined by IEEE754                                       | `3.14`  |
-| `Float`  | 32-bit floating point ｜ `(3.14 : Float)`                                       |
-| `BigInt` | represents numeric values larger than other types ｜ `10000000000000000000000N` |
+| type     | description                                       | example                    |
+| -------- | ------------------------------------------------- | -------------------------- |
+| `Int`    | 32-bit signed integer                             | `42`                       |
+| `Int64`  | 64-bit signed integer                             | `1000L`                    |
+| `UInt`   | 32-bit unsigned integer                           | `14U`                      |
+| `UInt64` | 64-bit unsigned integer                           | `14UL`                     |
+| `Double` | 64-bit floating point, defined by IEEE754         | `3.14`                     |
+| `Float`  | 32-bit floating point                             | `(3.14 : Float)`           |
+| `BigInt` | represents numeric values larger than other types | `10000000000000000000000N` |
 
 MoonBit also supports numeric literals, including decimal, binary, octal, and hexadecimal numbers.
 
@@ -1886,7 +1970,7 @@ trait Hash {
 
 trait Show {
   // writes a string representation of `Self` into a `Logger`
-  output(Self, Logger) -> String
+  output(Self, Logger) -> Unit
   to_string(Self) -> String
 }
 
