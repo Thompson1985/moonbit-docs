@@ -38,7 +38,9 @@ const sidebars: SidebarsConfig = {
             'examples/myers-diff',
             'examples/myers-diff2',
             'examples/myers-diff3',
-            'examples/pingpong/index'
+            'examples/pingpong/index',
+            'examples/segment-tree/index',
+            'examples/segment-tree2/index'
           ]
         : [
             'examples/sudoku/index',
@@ -48,7 +50,9 @@ const sidebars: SidebarsConfig = {
             'examples/gmachine-3',
             'examples/myers-diff',
             'examples/myers-diff2',
-            'examples/myers-diff3'
+            'examples/myers-diff3',
+            'examples/segment-tree/index',
+            'examples/segment-tree2/index'
           ]
     }
   ]

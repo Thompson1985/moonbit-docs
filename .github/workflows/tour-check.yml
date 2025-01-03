@@ -1,0 +1,19 @@
+name: check langauge tour
+
+on:
+  pull_request:
+    branches: main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - name: install
+        run: |
+          pnpm install
+      - name: check
+        run: |
+          cd moonbit-tour
+          pnpm build

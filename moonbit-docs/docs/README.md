@@ -74,7 +74,7 @@ Statements include:
 - Local variable bindings
 - Assignments
 - `return` statements
-- Any expression whose return type is `unit`
+- Any expression whose return type is `Unit`
 
 ## Functions
 
@@ -152,20 +152,20 @@ fn main {
 
 ### Labelled arguments
 
-Functions can declare labelled argument with the syntax `~label : Type`. `label` will also serve as parameter name inside function body:
+Functions can declare labelled argument with the syntax `label~ : Type`. `label` will also serve as parameter name inside function body:
 
 ```moonbit
-fn labelled(~arg1 : Int, ~arg2 : Int) -> Int {
+fn labelled(arg1~ : Int, arg2~ : Int) -> Int {
   arg1 + arg2
 }
 ```
 
-Labelled arguments can be supplied via the syntax `label=arg`. `label=label` can be abbreviated as `~label`:
+Labelled arguments can be supplied via the syntax `label=arg`. `label=label` can be abbreviated as `label~`:
 
 ```moonbit
 fn init {
   let arg1 = 1
-  println(labelled(arg2=2, ~arg1)) // 3
+  println(labelled(arg2=2, arg1~)) // 3
 }
 ```
 
@@ -173,10 +173,10 @@ Labelled function can be supplied in any order. The evaluation order of argument
 
 ### Optional arguments
 
-A labelled argument can be made optional by supplying a default expression with the syntax `~label : Type = default_expr`. If this argument is not supplied at call site, the default expression will be used:
+A labelled argument can be made optional by supplying a default expression with the syntax `label~ : Type = default_expr`. If this argument is not supplied at call site, the default expression will be used:
 
 ```moonbit live
-fn optional(~opt : Int = 42) -> Int {
+fn optional(opt~ : Int = 42) -> Int {
   opt
 }
 
@@ -189,7 +189,7 @@ fn main {
 The default expression will be evaluated every time it is used. And the side effect in the default expression, if any, will also be triggered. For example:
 
 ```moonbit live
-fn incr(~counter : Ref[Int] = { val: 0 }) -> Ref[Int] {
+fn incr(counter~ : Ref[Int] = { val: 0 }) -> Ref[Int] {
   counter.val = counter.val + 1
   counter
 }
@@ -198,8 +198,8 @@ fn main {
   println(incr()) // 1
   println(incr()) // still 1, since a new reference is created every time default expression is used
   let counter : Ref[Int] = { val: 0 }
-  println(incr(~counter)) // 1
-  println(incr(~counter)) // 2, since the same counter is used
+  println(incr(counter~)) // 1
+  println(incr(counter~)) // 2, since the same counter is used
 }
 ```
 
@@ -208,7 +208,7 @@ If you want to share the result of default expression between different function
 ```moonbit live
 let default_counter : Ref[Int] = { val: 0 }
 
-fn incr(~counter : Ref[Int] = default_counter) -> Int {
+fn incr(counter~ : Ref[Int] = default_counter) -> Int {
   counter.val = counter.val + 1
   counter.val
 }
@@ -222,13 +222,49 @@ fn main {
 Default expression can depend on the value of previous arguments. For example:
 
 ```moonbit
-fn sub_array[X](xs : Array[X], ~offset : Int, ~len : Int = xs.length() - offset) -> Array[X] {
+fn sub_array[X](xs : Array[X], offset~ : Int, len~ : Int = xs.length() - offset) -> Array[X] {
   ... // take a sub array of [xs], starting from [offset] with length [len]
 }
 
 fn init {
   println(sub_array([1, 2, 3], offset=1)) // [2, 3]
   println(sub_array([1, 2, 3], offset=1, len=1)) // [2]
+}
+```
+
+#### Automatically insert `Some` when supplying optional arguments
+
+It is quite often optional arguments have type `T?` with `None` as default value.
+In this case, passing the argument explicitly requires wrapping a `Some`:
+
+```moonbit
+fn image(width~ : Int? = None, height~ : Int? = None) -> Image { ... }
+fn main {
+  let img = image(width=Some(1920), height=Some(1080)) // ugly!
+  ...
+}
+```
+
+Fortunately, MoonBit provides a special kind of optional arguments to solve this problem.
+Optional arguments declared with `label? : T` has type `T?` and `None` as default value.
+When supplying this kind of optional argument directly, MoonBit will automatically insert a `Some`:
+
+```moonbit
+fn image(width? : Int, height? : Int) -> Image { ... }
+fn main {
+  let img = image(width=1920, height=1080) // much better!
+  ...
+}
+```
+
+Sometimes, it is also useful to pass a value of type `T?` directly,
+for example when forwarding optional argument.
+MoonBit provides a syntax `label?=value` for this, with `label?` being an abbreviation of `label?=label`:
+
+```moonbit
+fn image(width? : Int, height? : Int) -> Image { ... }
+fn fixed_width_image(height? : Int) -> Image {
+  image(width=1920, height?)
 }
 ```
 
@@ -242,7 +278,7 @@ Currently MoonBit supports two types of autofill arguments, `SourceLoc`, which i
 and `ArgsLoc`, which is a array containing the source location of each argument, if any:
 
 ```moonbit
-fn f(_x : Int, _y : Int, ~loc : SourceLoc = _, ~args_loc : ArgsLoc = _) -> Unit {
+fn f(_x : Int, _y : Int, loc~ : SourceLoc = _, args_loc~ : ArgsLoc = _) -> Unit {
   println("loc of whole function call: \{loc}")
   println("loc of arguments: \{args_loc}")
 }
@@ -286,7 +322,11 @@ if x == y {
 
 Curly brackets are used to group multiple expressions in the consequent or the else clause.
 
-Note that a conditional expression always returns a value in MoonBit, and the return values of the consequent and the else clause must be of the same type.
+Note that a conditional expression always returns a value in MoonBit, and the return values of the consequent and the else clause must be of the same type. Here is an example:
+
+```moonbit
+let initial = if size < 1 { 1 } else { size }
+```
 
 ### While loop
 
@@ -353,7 +393,7 @@ When there is an `else` clause, the `while` loop can also return a value. The re
   println(r2) //output: 7
 ```
 
-## For Loop
+### For Loop
 
 MoonBit also supports C-style For loops. The keyword `for` is followed by variable initialization clauses, loop conditions, and update clauses separated by semicolons. They do not need to be enclosed in parentheses.
 For example, the code below creates a new variable binding `i`, which has a scope throughout the entire loop and is immutable. This makes it easier to write clear code and reason about it:
@@ -476,6 +516,50 @@ fn main {
 }
 ```
 
+### Guard Statement
+
+The `guard` statement is used to check a specified invariant.
+If the condition of the invariant is satisfied, the program continues executing
+the subsequent statements and returns. If the condition is not satisfied (i.e., false),
+the code in the `else` block is executed and its evaluation result is returned (the subsequent statements are skipped).
+
+```moonbit
+guard index >= 0 && index < len else {
+  abort("Index out of range")
+}
+```
+
+The `guard` statement also supports pattern matching: in the following example,
+`getProcessedText` assumes that the input `path` points to resources that are all plain text,
+and it uses the `guard` statement to ensure this invariant. Compared to using
+a `match` statement, the subsequent processing of `text` can have one less level of indentation.
+
+```moonbit
+enum Resource {
+  Folder(Array[String])
+  PlainText(String)
+  JsonConfig(Json)
+}
+
+fn getProcessedText(resources : Map[String, Resource], path : String) -> String!Error {
+  guard let Some(PlainText(text)) = resources[path] else {
+    None => fail!("\{path} not found")
+    Some(Folder(_)) => fail!("\{path} is a folder")
+    Some(JsonConfig(_)) => fail!("\{path} is a json config")
+  }
+  ...
+  process(text)
+}
+```
+
+When the `else` part is omitted, the program terminates if the condition specified
+in the `guard` statement is not true or cannot be matched.
+
+```moonbit
+guard condition // equivalent to `guard condition else { panic() }`
+guard let Some(x) = expr // equivalent to `guard let Some(x) = expr else { _ => panic() }`
+```
+
 ## Iterator
 
 An iterator is an object that traverse through a sequence while providing access
@@ -592,15 +676,15 @@ let e = not(a)
 
 MoonBit have integer type and floating point type:
 
-| type     | description                                                                     | example |
-| -------- | ------------------------------------------------------------------------------- | ------- |
-| `Int`    | 32-bit signed integer                                                           | `42`    |
-| `Int64`  | 64-bit signed integer                                                           | `1000L` |
-| `UInt`   | 32-bit unsigned integer                                                         | `14U`   |
-| `UInt64` | 64-bit unsigned integer                                                         | `14UL`  |
-| `Double` | 64-bit floating point, defined by IEEE754                                       | `3.14`  |
-| `Float`  | 32-bit floating point ｜ `(3.14 : Float)`                                       |
-| `BigInt` | represents numeric values larger than other types ｜ `10000000000000000000000N` |
+| type     | description                                       | example                    |
+| -------- | ------------------------------------------------- | -------------------------- |
+| `Int`    | 32-bit signed integer                             | `42`                       |
+| `Int64`  | 64-bit signed integer                             | `1000L`                    |
+| `UInt`   | 32-bit unsigned integer                           | `14U`                      |
+| `UInt64` | 64-bit unsigned integer                           | `14UL`                     |
+| `Double` | 64-bit floating point, defined by IEEE754         | `3.14`                     |
+| `Float`  | 32-bit floating point                             | `(3.14 : Float)`           |
+| `BigInt` | represents numeric values larger than other types | `10000000000000000000000N` |
 
 MoonBit also supports numeric literals, including decimal, binary, octal, and hexadecimal numbers.
 
@@ -679,14 +763,34 @@ In double quotes string, a backslash followed by certain special characters form
 | `\o102`              | Octal escape sequence                                |
 | `\u5154`,`\u{1F600}` | Unicode escape sequence                              |
 
-MoonBit supports string interpolation. It enables you to substitute variables within interpolated strings. This feature simplifies the process of constructing dynamic strings by directly embedding variable values into the text.
+MoonBit supports string interpolation. It enables you to substitute variables within interpolated strings. This feature simplifies the process of constructing dynamic strings by directly embedding variable values into the text. Variables used for string interpolation must support the `to_string` method.
 
 ```moonbit
 let x = 42
 println("The answer is \{x}")
 ```
 
-Variables used for string interpolation must support the `to_string` method.
+Multi-line strings do not support interpolation by default, but you can enable interpolation for a specific line by changing the leading `#|` to `$|`:
+
+```moonbit
+let lang = "MoonBit"
+let str = 
+  #| Hello
+  #| ---
+  $| \{lang}\n
+  #| ---
+println(str)
+```
+
+Output:
+
+```
+ Hello
+ ---
+ MoonBit
+
+ ---
+```
 
 ### Char
 
@@ -984,7 +1088,7 @@ Enum constructors can have labelled argument:
 ```moonbit live
 enum E {
   // `x` and `y` are labelled argument
-  C(~x : Int, ~y : Int)
+  C(x~ : Int, y~ : Int)
 }
 
 // pattern matching constructor with labelled arguments
@@ -992,9 +1096,9 @@ fn f(e : E) -> Unit {
   match e {
     // `label=pattern`
     C(x=0, y=0) => println("0!")
-    // `~x` is an abbreviation for `x=x`
+    // `x~` is an abbreviation for `x=x`
     // Unmatched labelled arguments can be omitted via `..`
-    C(~x, ..) => println(x)
+    C(x~, ..) => println(x)
   }
 }
 
@@ -1002,7 +1106,7 @@ fn f(e : E) -> Unit {
 fn main {
   f(C(x=0, y=0)) // `label=value`
   let x = 0
-  f(C(~x, y=1)) // `~x` is an abbreviation for `x=x`
+  f(C(x~, y=1)) // `~x` is an abbreviation for `x=x`
 }
 ```
 
@@ -1010,8 +1114,8 @@ It is also possible to access labelled arguments of constructors like accessing 
 
 ```moonbit
 enum Object {
-  Point(~x : Double, ~y : Double)
-  Circle(~x : Double, ~y : Double, ~radius : Double)
+  Point(x~ : Double, y~ : Double)
+  Circle(x~ : Double, y~ : Double, radius~ : Double)
 }
 
 type! NotImplementedError derive(Show)
@@ -1053,7 +1157,7 @@ It is also possible to define mutable fields for constructor. This is especially
 enum Tree[X] {
   Nil
   // only labelled arguments can be mutable
-  Node(mut ~value : X, mut ~left : Tree[X], mut ~right : Tree[X], mut ~parent : Tree[X])
+  Node(mut value~ : X, mut left~ : Tree[X], mut right~ : Tree[X], mut parent~ : Tree[X])
 }
 
 // A set implemented using mutable binary search tree.
@@ -1067,9 +1171,9 @@ fn Set::insert[X : Compare](self : Set[X], x : X) -> Unit {
 
 // In-place insert a new element to a binary search tree.
 // Return the new tree root
-fn Tree::insert[X : Compare](self : Tree[X], x : X, ~parent : Tree[X]) -> Tree[X] {
+fn Tree::insert[X : Compare](self : Tree[X], x : X, parent~ : Tree[X]) -> Tree[X] {
   match self {
-    Nil => Node(value=x, left=Nil, right=Nil, ~parent)
+    Nil => Node(value=x, left=Nil, right=Nil, parent~)
     Node(_) as node => {
       let order = x.compare(node.value)
       if order == 0 {
@@ -1112,15 +1216,33 @@ fn init {
 }
 ```
 
-Besides pattern matching, you can also use `.0` to extract the internal representation of newtypes:
+Besides pattern matching, you can also use `._` to extract the internal representation of newtypes:
 
 ```moonbit
 fn init {
   let id: UserId = UserId(1)
-  let uid: Int = id.0
+  let uid: Int = id._
   println(uid)
 }
 ```
+
+### Type alias
+MoonBit supports type alias via the syntax `typealias Name = TargetType`:
+
+```moonbit
+pub typealias Index = Int
+// type alias are private by default
+typealias MapString[X] = Map[String, X]
+```
+
+unlike all other kinds of type declaration above, type alias does not define a new type,
+it is merely a type macro that behaves exactly the same as its definition.
+So for example one cannot define new methods or implement traits for a type alias.
+
+Type alias can be used to perform incremental code refactor.
+For example, if you want to move a type `T` from `@pkgA` to `@pkgB`,
+you can leave a type alias `typealias T = @pkgB.T` in `@pkgA`, and **incrementally** port uses of `@pkgA.T` to `@pkgB.T`.
+The type alias can be removed after all uses of `@pkgA.T` is migrated to `@pkgB.T`.
 
 ## Pattern Matching
 
@@ -1149,6 +1271,37 @@ match expr {
   Lit(n) as a => ...
   Add(e1, e2) | Mul(e1, e2) => ...
   _ => ...
+}
+```
+
+### Range Pattern
+For builtin integer types and `Char`, MoonBit allows matching whether the value falls in a specific range.
+Range patterns have the form `a..<b` or `a..=b`, where `..<` means the upper bound is exclusive, and `..=` means inclusive upper bound.
+`a` and `b` can be one of:
+
+- literal
+- named constant declared with `const`
+- `_`, meaning the pattern has no restriction on this side
+
+Here are some examples:
+
+```moonbit
+const Zero = 0
+fn sign(x : Int) -> Int {
+  match x {
+    _..<Zero => -1
+    Zero => 0
+    1..<_ => 1
+  }
+}
+
+fn classify_char(c : Char) -> String {
+  match c {
+    'a'..='z' => "lowercase"
+    'A'..='Z' => "uppercase"
+    '0'..='9' => "digit"
+    _ => "other"
+  }
 }
 ```
 
@@ -1314,15 +1467,15 @@ let result =
 
 ### Bitwise Operator
 
-MoonBit supports C-Style bitwise operators for both 32 bits and 64 bits `Int` and `UInt`, formatter will automatically insert parentheses for bitwise operators to avoid ambiguity.
+MoonBit supports C-Style bitwise operators.
 
 | Operator | Perform |
 | -------- | ------- |
 | `&`      | `land`  |
 | `\|`     | `lor`   |
 | `^`      | `lxor`  |
-| `<<`     | `shl`   |
-| `>>`     | `shr`   |
+| `<<`     | `op_shl`   |
+| `>>`     | `op_shr`   |
 
 ## Error Handling
 
@@ -1336,8 +1489,8 @@ type! E1 Int  // error type E1 has one constructor E1 with an Int payload
 type! E2      // error type E2 has one constructor E2 with no payload
 type! E3 {    // error type E3 has three constructors like a normal enum type
   A
-  B(Int, ~x : String)
-  C(mut ~x : String, Char, ~y : Bool)
+  B(Int, x~ : String)
+  C(mut x~ : String, Char, y~ : Bool)
 }
 ```
 
@@ -1487,7 +1640,7 @@ operator. For example:
 ```moonbit live
 type T Int
 type! E Int derive(Show)
-fn f(self: T) -> Unit!E { raise E(self.0) }
+fn f(self: T) -> Unit!E { raise E(self._) }
 fn main {
   let x = T(42)
   try f!(x) { e => println(e) }
@@ -1573,50 +1726,24 @@ fn reduce[S, T](self: List[S], op: (T, S) -> T, init: T) -> T {
 
 ## Access Control
 
-By default, all function definitions and variable bindings are _invisible_ to other packages; types without modifiers are abstract data types, whose name is exported but the internals are invisible. This design prevents unintended exposure of implementation details. You can use the `pub` modifier before `type`/`enum`/`struct`/`let` or top-level function to make them fully visible, or put `priv` before `type`/`enum`/`struct` to make it fully invisible to other packages. You can also use `pub` or `priv` before field names to obtain finer-grained access control. However, it is important to note that:
+By default, all function definitions and variable bindings are _invisible_ to other packages.
+You can use the `pub` modifier before toplevel `let`/`fn` to make them public.
 
-- Struct fields cannot be defined as `pub` within an abstract or private struct since it makes no sense.
-- Enum constructors do not have individual visibility so you cannot use `pub` or `priv` before them.
+There are four different kinds of visibility for types in MoonBit:
 
-```moonbit
-struct R1 {       // abstract data type by default
-  x: Int          // implicitly private field
-  pub y: Int      // ERROR: `pub` field found in an abstract type!
-  priv z: Int     // WARNING: `priv` is redundant!
-}
+- private type, declared with `priv`, completely invisible to the outside world
+- abstract type, which is the default visibility for types. Only the name of an abstract type is visible outside, the internal representation of the type is hidden
+- readonly types, declared with `pub(readonly)`. The internal representation of readonly types are visible outside,
+but users can only read the values of these types from outside, construction and mutation are not allowed
+- fully public types, declared with `pub(all)`. The outside world can freely construct, modify and read values of these types
 
-pub struct R2 {       // explicitly public struct
-  x: Int              // implicitly public field
-  pub y: Int          // WARNING: `pub` is redundant!
-  priv z: Int         // explicitly private field
-}
+Currently, the semantic of `pub` is `pub(all)`. But in the future, the meaning of `pub` will be ported to `pub(readonly)`.
+In addition to the visibility of the type itself, the fields of a public `struct` can be annotated with `priv`,
+which will hide the field from the outside world completely.
+Note that `struct`s with private fields cannot be constructed directly outside,
+but you can update the public fields using the functional struct update syntax.
 
-priv struct R3 {       // explicitly private struct
-  x: Int               // implicitly private field
-  pub y: Int           // ERROR: `pub` field found in a private type!
-  priv z: Int          // WARNING: `priv` is redundant!
-}
-
-enum T1 {       // abstract data type by default
-  A(Int)        // implicitly private variant
-  pub B(Int)    // ERROR: no individual visibility!
-  priv C(Int)   // ERROR: no individual visibility!
-}
-
-pub enum T2 {       // explicitly public enum
-  A(Int)            // implicitly public variant
-  pub B(Int)        // ERROR: no individual visibility!
-  priv C(Int)       // ERROR: no individual visibility!
-}
-
-priv enum T3 {       // explicitly private enum
-  A(Int)             // implicitly private variant
-  pub B(Int)         // ERROR: no individual visibility!
-  priv C(Int)        // ERROR: no individual visibility!
-}
-```
-
-Another useful feature supported in MoonBit is `pub(readonly)` types, which are inspired by [private types](https://v2.ocaml.org/manual/privatetypes.html) in OCaml. In short, values of `pub(readonly)` types can be destructed by pattern matching and the dot syntax, but cannot be constructed or mutated in other packages. Note that there is no restriction within the same package where `pub(readonly)` types are defined.
+Readonly types is a very useful feature, inspired by [private types](https://v2.ocaml.org/manual/privatetypes.html) in OCaml. In short, values of `pub(readonly)` types can be destructed by pattern matching and the dot syntax, but cannot be constructed or mutated in other packages. Note that there is no restriction within the same package where `pub(readonly)` types are defined.
 
 ```moonbit
 // Package A
@@ -1767,7 +1894,7 @@ pub fn length[A](self : MyList[A]) -> Int {
   self.elems.length()
 }
 
-pub fn op_as_view[A](self : MyList[A], ~start : Int, ~end : Int) -> MyListView[A] {
+pub fn op_as_view[A](self : MyList[A], start~ : Int, end~ : Int) -> MyListView[A] {
   println("op_as_view: [\{start},\{end})")
   if start < 0 || end > self.length() { abort("index out of bounds") }
   { ls: self, start, end }
@@ -1804,15 +1931,51 @@ trait I {
 In the body of a trait definition, a special type `Self` is used to refer to the type that implements the trait.
 
 To implement a trait, a type must provide all the methods required by the trait.
-However, there is no need to implement a trait explicitly. Types with the required methods automatically implements a trait. For example, the following trait:
+Implementation for trait methods can be provided via the syntax `impl Trait for Type with method_name(...) { ... }`, for example:
 
 ```moonbit
 trait Show {
   to_string(Self) -> String
 }
+
+struct MyType { ... }
+impl Show for MyType with to_string(self) { ... }
+
+// trait implementation with type parameters.
+// `[X : Show]` means the type parameter `X` must implement `Show`,
+// this will be covered later.
+impl[X : Show] Show for Array[X] with to_string(self) { ... }
 ```
 
-is automatically implemented by builtin types such as `Int` and `Double`.
+Type annotation can be omitted for trait `impl`: MoonBit will automatically infer the type based on the signature of `Trait::method` and the self type.
+
+The author of the trait can also define default implementations for some methods in the trait, for example:
+
+```moonbit
+trait I {
+  f(Self) -> Unit
+  f_twice(Self) -> Unit
+}
+
+impl I with f_twice(self) {
+  self.f()
+  self.f()
+}
+```
+
+Implementers of trait `I` don't have to provide an implementation for `f_twice`: to implement `I`, only `f` is necessary.
+They can always override the default implementation with an explicit `impl I for Type with f_twice`, if desired, though.
+
+If an explicit `impl` or default implementation is not found, trait method resolution falls back to regular methods.
+This allows types to implement a trait implicitly, hence allowing different packages to work together without seeing or depending on each other.
+For example, the following trait is automatically implemented for builtin number types such as `Int` and `Double`:
+
+```moonbit
+trait Number {
+  op_add(Self, Self) -> Self
+  op_mul(Self, Self) -> Self
+}
+```
 
 When declaring a generic function, the type parameters can be annotated with the traits they should implement, allowing the definition of constrained generic functions. For example:
 
@@ -1823,7 +1986,7 @@ trait Number {
 }
 
 fn square[N: Number](x: N) -> N {
-  x * x
+  x * x // same as `x.op_mul(x)`
 }
 ```
 
@@ -1842,7 +2005,7 @@ trait Number {
 }
 
 fn square[N: Number](x: N) -> N {
-  x * x
+  x * x // same as `x.op_mul(x)`
 }
 
 struct Point {
@@ -1850,21 +2013,12 @@ struct Point {
   y: Int
 } derive(Show)
 
-fn op_add(self: Point, other: Point) -> Point {
-  { x: self.x + other.x, y: self.y + other.y }
+impl Number for Point with op_add(p1, p2) {
+  { x: p1.x + p2.x, y: p1.y + p2.y }
 }
 
-fn op_mul(self: Point, other: Point) -> Point {
-  { x: self.x * other.x, y: self.y * other.y }
-}
-```
-
-Methods of a trait can be called directly via `Trait::method`. MoonBit will infer the type of `Self` and check if `Self` indeed implements `Trait`, for example:
-
-```moonbit live
-fn main {
-  println(Show::to_string(42))
-  println(Compare::compare(1.0, 2.5))
+impl Number for Point with op_mul(p1, p2) {
+  { x: p1.x * p2.x, y: p1.y * p2.y }
 }
 ```
 
@@ -1886,7 +2040,7 @@ trait Hash {
 
 trait Show {
   // writes a string representation of `Self` into a `Logger`
-  output(Self, Logger) -> String
+  output(Self, Logger) -> Unit
   to_string(Self) -> String
 }
 
@@ -1895,38 +2049,107 @@ trait Default {
 }
 ```
 
-## Access control of methods and direct implementation of traits
-
-To make the trait system coherent (i.e. there is a globally unique implementation for every `Type: Trait` pair), and prevent third-party packages from modifying behavior of existing programs by accident, _only the package that defines a type can define methods for it_. So one cannot define new methods or override old methods for builtin and foreign types.
-
-However, it is often useful to implement new traits for an existing type. So MoonBit provides a mechanism to directly implement a trait, defined using the syntax `impl Trait for Type with method_name(...) { ... }`. Type annotations can be omitted from `impl`, because MoonBit can infer the correct types from the trait's signature. For example, to implement a new trait `ToMyBinaryProtocol` for builtin types, one can (and must) use `impl`:
-
-```moonbit
-trait ToMyBinaryProtocol {
-  to_my_binary_protocol(Self, Buffer) -> Unit
-}
-
-impl ToMyBinaryProtocol for Int with to_my_binary_protocol(x, b) { ... }
-impl ToMyBinaryProtocol for Int with to_my_binary_protocol(x, b) { ... }
-impl ToMyBinaryProtocol for Int with to_my_binary_protocol(x, b) { ... }
-impl[X : ToMyBinaryProtocol] for Array[X] with to_my_binary_protocol(arr, b) { ... }
-```
-
-When searching for the implementation of a trait, `impl`s have a higher priority, so they can be used to override ordinary methods with undesirable behavior. `impl`s can only be used to implement the specified trait. They cannot be called directly like ordinary methods. Furthermore, _only the package of the type or the package of the trait can define an implementation_. For example, only `@pkg1` and `@pkg2` are allowed to define `impl @pkg1.Trait for @pkg2.Type` for type `@pkg2.Type`. This restriction ensures that MoonBit's trait system is still coherent with the extra flexibility of `impl`s.
-
-To invoke an trait implementation directly, one can use the `Trait::method` syntax:
+### Involke trait methods directly
+Methods of a trait can be called directly via `Trait::method`. MoonBit will infer the type of `Self` and check if `Self` indeed implements `Trait`, for example:
 
 ```moonbit live
-trait MyTrait {
-  f(Self) -> Unit
-}
-
-impl MyTrait for Int with f(self) { println("Got Int \{self}!") }
-
 fn main {
-  MyTrait::f(42)
+  println(Show::to_string(42))
+  println(Compare::compare(1.0, 2.5))
 }
 ```
+
+Trait implementations can also be involked via dot syntax, with the following restrictions:
+
+1. if a regular method is present, the regular method is always favored when using dot syntax
+2. only trait implementations that are located in the package of the self type can be involked via dot syntax
+   - if there are multiple trait methods (from different traits) with the same name available, an ambiguity error is reported
+3. if neither of the above two rules apply, trait `impl`s in current package will also be searched for dot syntax.
+   This allows extending a foreign type locally.
+   - these `impl`s can only be called via dot syntax locally, even if they are public.
+
+The above rules ensures that MoonBit's dot syntax enjoys good property while being flexible.
+For example, adding a new dependency never break existing code with dot syntax due to ambiguity.
+These rules also make name resolution of MoonBit extremely simple:
+the method called via dot syntax must always come from current package or the package of the type!
+
+Here's an example of calling trait `impl` with dot syntax:
+
+```moonbit
+struct MyType { ... }
+
+impl Show for MyType with ...
+
+fn main {
+  let x : MyType = ...
+  println(x.to_string()) // ok
+}
+```
+
+## Access control of methods and trait implementations
+
+To make the trait system coherent (i.e. there is a globally unique implementation for every `Type: Trait` pair),
+and prevent third-party packages from modifying behavior of existing programs by accident,
+MoonBit employs the following restrictions on who can define methods/implement traits for types:
+
+- _only the package that defines a type can define methods for it_. So one cannot define new methods or override old methods for builtin and foreign types.
+- _only the package of the type or the package of the trait can define an implementation_.
+  For example, only `@pkg1` and `@pkg2` are allowed to write `impl @pkg1.Trait for @pkg2.Type`.
+
+The second rule above allows one to add new functionality to a foreign type by defining a new trait and implementing it.
+This makes MoonBit's trait & method system flexible while enjoying good coherence property.
+
+## Visibility of traits and sealed traits
+There are four visibility for traits, just like `struct` and `enum`: private, abstract, readonly and fully public.
+Private traits are declared with `priv trait`, and they are completely invisible from outside.
+Abstract trait is the default visibility. Only the name of the trait is visible from outside, and the methods in the trait are not exposed.
+Readonly traits are declared with `pub(readonly) trait`, their methods can be involked from outside, but only the current package can add new implementation for readonly traits.
+Finally, fully public traits are declared with `pub(open) trait`, they are open to new implementations outside current package, and their methods can be freely used.
+Currently, `pub trait` defaults to `pub(open) trait`. But in the future, the semantic of `pub trait` will be ported to `pub(readonly)`.
+
+Abstract and readonly traits are sealed, because only the package defining the trait can implement them.
+Implementing a sealed (abstract or readonly) trait outside its package result in compiler error.
+If you are the owner of a sealed trait, and you want to make some implementation available to users of your package,
+make sure there is at least one declaration of the form `impl Trait for Type with ...` in your package.
+Implementations with only regular method and default implementations will not be available outside.
+
+Here's an example of abstract trait:
+
+```moonbit
+trait Number {
+ op_add(Self, Self) -> Self
+ op_sub(Self, Self) -> Self
+}
+
+fn add[N : Number](x : X, y: X) -> X {
+  Number::op_add(x, y)
+}
+
+fn sub[N : Number](x : X, y: X) -> X {
+  Number::op_sub(x, y)
+}
+
+impl Number for Int with op_add(x, y) { x + y }
+impl Number for Int with op_sub(x, y) { x - y }
+
+impl Number for Double with op_add(x, y) { x + y }
+impl Number for Double with op_sub(x, y) { x - y }
+```
+
+From outside this package, users can only see the following:
+
+```moonbit
+trait Number
+
+fn op_add[N : Number](x : N, y : N) -> N
+fn op_sub[N : Number](x : N, y : N) -> N
+
+impl Number for Int
+impl Number for Double
+```
+
+The author of `Number` can make use of the fact that only `Int` and `Double` can ever implement `Number`,
+because new implementations are not allowed outside.
 
 ## Automatically derive builtin traits
 
@@ -1965,7 +2188,7 @@ trait Animal {
 type Duck String
 fn Duck::make(name: String) -> Duck { Duck(name) }
 fn speak(self: Duck) -> Unit {
-  println(self.0 + ": quack!")
+  println(self._ + ": quack!")
 }
 
 type Fox String
@@ -2080,6 +2303,18 @@ Pragmas are annotations inside doc comments. They all take the form `/// @word .
     div(x, y) |> ignore // warning: Div will cause an error when y is zero
   }
   ```
+
+## Special Syntax
+
+### TODO syntax
+
+The `todo` syntax (`...`) is a special construct used to mark sections of code that are not yet implemented or are placeholders for future functionality. For example:
+
+```moonbit
+fn todo_in_func() -> Int {
+  ...
+}
+```
 
 ## MoonBit's build system
 

@@ -60,7 +60,7 @@ fn bar() -> Int {
 
 - 值字面量（例如布尔值、数字、字符、字符串、数组、元组、结构体）
 - 算术、逻辑和比较运算
-- 访问数组元素（例如 `a[0]`）、结构体字段（例如 `r.x`）或元组的元素（例如 `t.0`）
+- 访问数组元素（例如 `a[0]`）、结构体字段（例如 `r.x`）或元组的元素（例如 `t._`）
 - 变量和（大写字母开头的）枚举构造器
 - 匿名局部函数定义
 - `match` 和 `if` 表达式
@@ -71,7 +71,7 @@ fn bar() -> Int {
 - 局部变量绑定
 - 赋值
 - `return` 语句
-- 返回类型为 `unit` 的任何表达式
+- 返回类型为 `Unit` 的任何表达式
 
 ## 函数
 
@@ -153,20 +153,20 @@ fn main {
 
 ### 带标签的参数
 
-可以用 `~label : Type` 的语法为函数声明带标签的参数。函数体内参数的名字也是 `label`：
+可以用 `label~ : Type` 的语法为函数声明带标签的参数。函数体内参数的名字也是 `label`：
 
 ```moonbit
-fn labelled(~arg1 : Int, ~arg2 : Int) -> Int {
+fn labelled(arg1~ : Int, arg2~ : Int) -> Int {
   arg1 + arg2
 }
 ```
 
-调用函数时，可以用 `label=arg` 的语法提供带标签的参数。`label=label` 可以简写成 `~label`：
+调用函数时，可以用 `label=arg` 的语法提供带标签的参数。`label=label` 可以简写成 `label~`：
 
 ```moonbit
 fn init {
   let arg1 = 1
-  println(labelled(arg2=2, ~arg1)) // 3
+  println(labelled(arg2=2, arg1~)) // 3
 }
 ```
 
@@ -174,10 +174,10 @@ fn init {
 
 ### 可选的参数
 
-可选的参数是带有默认值的带标签参数。声明可选的参数的语法是 `~label : Type = default_expr`。调用函数时，如果没有提供这个参数，就会使用默认值作为参数：
+可选的参数是带有默认值的带标签参数。声明可选的参数的语法是 `label~ : Type = default_expr`。调用函数时，如果没有提供这个参数，就会使用默认值作为参数：
 
 ```moonbit live
-fn optional(~opt : Int = 42) -> Int {
+fn optional(opt~ : Int = 42) -> Int {
   opt
 }
 
@@ -190,7 +190,7 @@ fn main {
 每次使用默认参数调用一个函数时，都会重新求值默认值的表达式，也会被重新触发其中的副作用。例如：
 
 ```moonbit live
-fn incr(~counter : Ref[Int] = { val: 0 }) -> Ref[Int] {
+fn incr(counter~ : Ref[Int] = { val: 0 }) -> Ref[Int] {
   counter.val = counter.val + 1
   counter
 }
@@ -199,8 +199,8 @@ fn main {
   println(incr()) // 1
   println(incr()) // 依然是 1，因为重新求值了默认表达式，产生了一个新的 Ref
   let counter : Ref[Int] = { val: 0 }
-  println(incr(~counter)) // 1
-  println(incr(~counter)) // 2，因为两次调用使用了同一个 Ref
+  println(incr(counter~)) // 1
+  println(incr(counter~)) // 2，因为两次调用使用了同一个 Ref
 }
 ```
 
@@ -209,7 +209,7 @@ fn main {
 ```moonbit live
 let default_counter : Ref[Int] = { val: 0 }
 
-fn incr(~counter : Ref[Int] = default_counter) -> Int {
+fn incr(counter~ : Ref[Int] = default_counter) -> Int {
   counter.val = counter.val + 1
   counter.val
 }
@@ -223,13 +223,44 @@ fn main {
 默认值可以依赖于前面的参数，例如：
 
 ```moonbit
-fn sub_array[X](xs : Array[X], ~offset : Int, ~len : Int = xs.length() - offset) -> Array[X] {
+fn sub_array[X](xs : Array[X], offset~ : Int, len~ : Int = xs.length() - offset) -> Array[X] {
   ... // 生成 xs 的一个从 offset 开始、长度为 len 的子数组
 }
 
 fn main {
   println(sub_array([1, 2, 3], offset=1)) // [2, 3]
   println(sub_array([1, 2, 3], offset=1, len=1)) // [2]
+}
+```
+
+#### 在提供可选参数时让编译器自动插入 `Some`
+
+许多可选参数的类型是 `T?`，默认值是 `None`。显式提供这种参数时，需要裹一层构造器 `Some`：
+
+```moonbit
+fn image(width~ : Int? = None, height~ : Int? = None) -> Image { ... }
+fn main {
+  let img = image(width=Some(1920), height=Some(1080)) // 丑!
+  ...
+}
+```
+
+MoonBit 提供了一种特殊的可选参数来解决这个问题。可以用 `label? : T` 来声明一个可选参数，这个可选参数的类型是 `T?`，默认值是 `None`。调用者显式提供这一参数时，MoonBit 会自动在参数上插入一层 `Some`：
+
+```moonbit
+fn image(width? : Int, height? : Int) -> Image { ... }
+fn main {
+  let img = image(width=1920, height=1080) // 好多了!
+  ...
+}
+```
+
+不过，有时依然需要直接直接传递一个类型为 `T?` 的值，例如在转发一个可选参数时。为此，MoonBit 提供了一个语法 `label?=value`，表示直接把类型为 `T?` 的值 `value` 传递给参数 `label`。此外，`label?=label` 可以简写成 `label?`：
+
+```moonbit
+fn image(width? : Int, height? : Int) -> Image { ... }
+fn fixed_width_image(height? : Int) -> Image {
+  image(width=1920, height?)
 }
 ```
 
@@ -240,7 +271,7 @@ MoonBit 能够自动在每次函数调用时填充某些特定类型的参数，
 目前 MoonBit 支持两种类型的自动填充参数。代表整个函数调用在源码中位置的 `SourceLoc` 类型，以及包含每个参数各自的位置的 `ArgsLoc` 类型：
 
 ```moonbit
-fn f(_x : Int, _y : Int, ~loc : SourceLoc = _, ~args_loc : ArgsLoc = _) -> Unit {
+fn f(_x : Int, _y : Int, loc~ : SourceLoc = _, args_loc~ : ArgsLoc = _) -> Unit {
   println("整个函数调用的位置：\{loc}")
   println("各个参数的位置：\{args_loc}")
 }
@@ -285,6 +316,11 @@ if x == y {
 花括号用于在结果或 `else` 子句中组合表达式。
 
 注意，在 MoonBit 中，条件表达式总是返回一个值，其结果和 `else` 子句的返回值类型必须相同。
+一个配合条件表达式使用`let`绑定的例子：
+
+```moonbit
+let initial = if size < 1 { 1 } else { size }
+```
 
 ### While 循环
 
@@ -351,7 +387,7 @@ fn main {
   println(r2) //output: 7
 ```
 
-## For 循环
+### For 循环
 
 MoonBit 也支持 C 风格的 For 循环。关键字`for`后依次跟随以分号间隔的变量初始化子句、循环条件和更新子句。三者不需要使用圆括号包裹。
 例如下面的代码创建了一个新的变量绑定`i`, 它的作用域在整个循环中，且是不可变的。这更利于编写清晰的代码和推理：
@@ -488,6 +524,45 @@ fn main {
 }
 ```
 
+### 卫语句
+
+卫语句用于检查指定的不变量。如果不变量的条件满足，程序继续执行后续的语句并返回。
+如果条件不满足（即为假），则执行 `else` 块中的代码并返回它的求值结果（后续的语句会被跳过）。
+
+```moonbit
+guard index >= 0 && index < len else {
+  abort("Index out of range")
+}
+```
+
+`guard` 语句也支持模式匹配：下面的例子中`getProcessedText`假设输入的`path`指向的都是纯文本的资源，
+它使用卫语句保证这一不变量。相比于直接使用`match`语句，后续对`text`的处理过程可以少一层缩进。
+
+```moonbit
+enum Resource {
+  Folder(Array[String])
+  PlainText(String)
+  JsonConfig(Json)
+}
+
+fn getProcessedText(resources : Map[String, Resource], path : String) -> String!Error {
+  guard let Some(PlainText(text)) = resources[path] else {
+    None => fail!("\{path} not found")
+    Some(Folder(_)) => fail!("\{path} is a folder")
+    Some(JsonConfig(_)) => fail!("\{path} is a json config")
+  }
+  ...
+  process(text)
+}
+```
+
+当省略`else`的部分时，卫语句指定的条件不为真或者无法匹配时，程序终止。
+
+```moonbit
+guard condition // 相当于 guard condition else { panic() }
+guard let Some(x) = expr // 相当于 guard let Some(x) = expr else { _ => panic() }
+```
+
 ## 迭代器
 
 迭代器（Iterator）是一个用来遍历访问某个序列的元素的对象。传统面向对象语言（例如 Java），使用 `Iterator<T>` 和 `next()`
@@ -583,15 +658,15 @@ let e = not(a)
 
 MoonBit 支持整型和浮点类型：
 
-| 类型     | 描述                                           | 例子    |
-| -------- | ---------------------------------------------- | ------- |
-| `Int`    | 32 位有符号整数                                | `42`    |
-| `Int64`  | 64 位有符号整数                                | `1000L` |
-| `UInt`   | 32 位无符号整数                                | `14U`   |
-| `UInt64` | 64 位无符号整数                                | `14UL`  |
-| `Double` | 64 位浮点数，由 IEEE754 定义                   | `3.14`  |
-| `Float`  | 32 位单精度浮点数 ｜ `(3.14 : Float)`          |
-| `BigInt` | 表示任意大的整数 ｜ `10000000000000000000000N` |
+| 类型     | 描述                         | 例子                       |
+| -------- | ---------------------------- | -------------------------- |
+| `Int`    | 32 位有符号整数              | `42`                       |
+| `Int64`  | 64 位有符号整数              | `1000L`                    |
+| `UInt`   | 32 位无符号整数              | `14U`                      |
+| `UInt64` | 64 位无符号整数              | `14UL`                     |
+| `Double` | 64 位浮点数，由 IEEE754 定义 | `3.14`                     |
+| `Float`  | 32 位单精度浮点数            | `(3.14 : Float)`           |
+| `BigInt` | 表示任意大的整数             | `10000000000000000000000N` |
 
 MoonBit 支持的数字字面量，包括十进制、二进制、八进制和十六进制。
 
@@ -644,9 +719,7 @@ let bigint : BigInt = 42
 let a = "兔rabbit"
 println(a[0]) // output: 兔
 println(a[1]) // output: r
-```
 
-```moonbit
 let b =
   #| Hello
   #| MoonBit
@@ -664,14 +737,34 @@ let b =
 | `\u5154`,`\u{1F600}` | Unicode 字符转义序列         |
 
 MoonBit 支持字符串插值，它可以把字符串中内插的变量替换为变量具体的值。
-这个特性能够简化动态拼接字符串的过程。
+这个特性能够简化动态拼接字符串的过程。用于字符串内插的变量必须实现了 `to_string` 方法。
 
 ```moonbit
 let x = 42
 println("The answer is \{x}")
 ```
 
-用于字符串内插的变量必须支持 `to_string` 方法。
+多行字符串默认不支持插值转义，但可以通过将行首的`#|`改为`$|`单独为某行开启插值转义：
+
+```moonbit
+let lang = "MoonBit"
+let str = 
+  #| Hello
+  #| ---
+  $| \{lang}\n
+  #| ---
+println(str)
+```
+
+输出如下
+
+```
+ Hello
+ ---
+ MoonBit
+
+ ---
+```
 
 ### 字符
 
@@ -685,7 +778,7 @@ let zero = '\u{30}'
 let zero = '\u0030'
 ```
 
-### 字节
+### 字节（序列）
 
 在 MoonBit 中，字节字面量可以是一个 ASCII 字符或一个转义序列，它们被单引号`'`包围，并且前面有字符`b`。字节字面量的类型是 Byte。例如：
 
@@ -695,6 +788,16 @@ fn main {
   println(b1.to_int())
   let b2 = b'\xff'
   println(b2.to_int())
+}
+```
+
+`Bytes` 则是一个字节序列。类似于字节字面量，字节序列的字面量形式为 `b"..."`。例如：
+
+```moonbit live
+fn main {
+  let b1 : Bytes = b"abcd"
+  let b2 = b"\x61\x62\x63\x64"
+  println(b1 == b2) // true
 }
 ```
 
@@ -952,7 +1055,7 @@ fn is_singleton(l: List) -> Bool {
 ```moonbit live
 enum E {
   // `x` 和 `y` 是带标签的参数
-  C(~x : Int, ~y : Int)
+  C(x~ : Int, y~ : Int)
 }
 
 // 模式匹配有带标签参数的构造器
@@ -960,9 +1063,9 @@ fn f(e : E) -> Unit {
   match e {
     // `标签=匹配参数的模式`
     C(x=0, y=0) => println("0!")
-    // `~x` 是 `x=x` 的简写
+    // `x~` 是 `x=x` 的简写
     // 未被匹配的带标签参数可以用 `..` 来忽略
-    C(~x, ..) => println(x)
+    C(x~, ..) => println(x)
   }
 }
 
@@ -970,7 +1073,7 @@ fn f(e : E) -> Unit {
 fn main {
   f(C(x=0, y=0)) // `标签=参数的值`
   let x = 0
-  f(C(~x, y=1)) // `~x` 是 `x=x` 的简写
+  f(C(x~, y=1)) // `x~` 是 `x=x` 的简写
 }
 ```
 
@@ -978,8 +1081,8 @@ fn main {
 
 ```moonbit live
 enum Object {
-  Point(~x : Double, ~y : Double)
-  Circle(~x : Double, ~y : Double, ~radius : Double)
+  Point(x~ : Double, y~ : Double)
+  Circle(x~ : Double, y~ : Double, radius~ : Double)
 }
 
 type! NotImplementedError derive(Show)
@@ -1021,7 +1124,7 @@ MoonBit 支持给构造器声明可变的字段。这对实现可变数据结构
 enum Tree[X] {
   Nil
   // only labelled arguments can be mutable
-  Node(mut ~value : X, mut ~left : Tree[X], mut ~right : Tree[X], mut ~parent : Tree[X])
+  Node(mut value~ : X, mut left~ : Tree[X], mut right~ : Tree[X], mut parent~ : Tree[X])
 }
 
 // 一个使用可变的二叉搜索树实现的集合
@@ -1035,9 +1138,9 @@ fn Set::insert[X : Compare](self : Set[X], x : X) -> Unit {
 
 // 像一棵可变的二叉搜索树中插入一个新的元素。
 // 返回插入后二叉搜索树新的根节点
-fn Tree::insert[X : Compare](self : Tree[X], x : X, ~parent : Tree[X]) -> Tree[X] {
+fn Tree::insert[X : Compare](self : Tree[X], x : X, parent~ : Tree[X]) -> Tree[X] {
   match self {
-    Nil => Node(value=x, left=Nil, right=Nil, ~parent)
+    Nil => Node(value=x, left=Nil, right=Nil, parent~)
     Node(_) as node => {
       let order = x.compare(node.value)
       if order == 0 {
@@ -1081,15 +1184,28 @@ fn init {
 }
 ```
 
-除了模式匹配，还可以使用 `.0` 提取新类型的内部表示：
+除了模式匹配，还可以使用 `._` 提取新类型的内部表示：
 
 ```moonbit
 fn init {
   let id: UserId = UserId(1)
-  let uid: Int = id.0
+  let uid: Int = id._
   println(uid)
 }
 ```
+
+### 类型别名
+MoonBit 支持类型别名。声明类型别名的语法是 `typealias Name = TargetType`:
+
+```moonbit
+pub typealias Index = Int
+// 类型别名默认是私有的
+typealias MapString[X] = Map[String, X]
+```
+
+和上面提到的所有其他形式的类型定义不同，类型别名不会真的创建一个新的类型，它只是一个类型层面的宏，在所有地方都等价于它的定义。所以用户无法给类型别名定义方法或是实现接口。
+
+类型别名可以用于代码的渐进式重构。例如，如果要把 `@pkgA` 中的类型 `T` 迁移到 `@pkgB`，可以现在 `@pkgA` 中留下一个类型别名 `typealias T = @pkgB.T`，然后**渐进式**地逐步把代码仓库各处的 `@pkgA.T` 替换成 `@pkgB.T`。直到所有替换完成，再删除 `@pkgA` 中的类型别名。
 
 ## 模式匹配
 
@@ -1115,6 +1231,37 @@ match expr {
   Lit(n) as a => ...
   Add(e1, e2) | Mul(e1, e2) => ...
   _ => ...
+}
+```
+
+### 范围模式匹配
+对于内建的整数类型和字符类型 `Char`，MoonBit 允许匹配一个值是否落在某个范围内。
+范围模式的语法是 `a..<b` 或 `a..=b`，其中 `..<` 表示匹配时不包含上界，`..=` 表示包含上界。
+`a` 和 `b` 可以是：
+
+- 字面量
+- 用 `const` 声明的常量
+- `_`，表示在这一侧没有任何约束
+
+下面是一些例子：
+
+```moonbit
+const Zero = 0
+fn sign(x : Int) -> Int {
+  match x {
+    _..<Zero => -1
+    Zero => 0
+    1..<_ => 1
+  }
+}
+
+fn classify_char(c : Char) -> String {
+  match c {
+    'a'..='z' => "lowercase"
+    'A'..='Z' => "uppercase"
+    '0'..='9' => "digit"
+    _ => "other"
+  }
 }
 ```
 
@@ -1275,15 +1422,15 @@ let result =
 
 ### 位运算符
 
-MoonBit 支持 C 风格的位运算符，可用于 32 位和 64 位的 `Int` 和 `UInt`，格式化工具会自动添加括号来避免歧义。
+MoonBit 支持 C 风格的位运算符。
 
 | 运算符 | 操作   |
 | ------ | ------ |
 | `&`    | `land` |
 | `\|`   | `lor`  |
 | `^`    | `lxor` |
-| `<<`   | `shl`  |
-| `>>`   | `shr`  |
+| `<<`   | `op_shl`  |
+| `>>`   | `op_shr`  |
 
 ## 错误处理
 
@@ -1296,8 +1443,8 @@ type! E1 Int  // 错误类型 E1 具有一个构造函数 E1，并带有一个 I
 type! E2      // 错误类型 E2 具有一个没有负载的构造函数 E2
 type! E3 {    // 错误类型 E3 类似于普通的枚举类型，有三个构造函数
   A
-  B(Int, ~x : String)
-  C(mut ~x : String, Char, ~y : Bool)
+  B(Int, x~ : String)
+  C(mut x~ : String, Char, y~ : Bool)
 }
 
 ```
@@ -1437,7 +1584,7 @@ fn main {
 ```moonbit live
 type T Int
 type! E Int derive(Show)
-fn f(self: T) -> Unit!E { raise E(self.0) }
+fn f(self: T) -> Unit!E { raise E(self._) }
 fn main {
   let x = T(42)
   try f!(x) { e => println(e) }
@@ -1521,55 +1668,20 @@ fn reduce[S, T](self: List[S], op: (T, S) -> T, init: T) -> T {
 ## 访问控制
 
 默认情况下，所有函数定义和变量绑定对其他包都是 _不可见_ 的；
-没有修饰符的类型是抽象数据类型，其名称被导出，但内部是不可见的。
-这种设计防止了意外暴露实现细节。
-您可以在 `type`/`fn`/`let` 前使用 `pub` 修饰符使其完全可见，或在 `type`
-前使用 `priv` 修饰符使其对其他包完全不可见。
-您还可以在字段名前使用 `pub` 或 `priv` 获得更细粒度的访问控制。
-但是，请注意：
+您可以在 `fn`/`let` 前使用 `pub` 修饰符使其完全可见。
+类型有四种不同的可见性：
 
-- 在抽象或私有结构体内，所有字段都不能被定义为 `pub`，因为这样没有意义。
-- 枚举类型的构造器没有单独的可见性，所以不能在它们前面使用 `pub` 或 `priv`
+- 私有类型，用 `priv` 修饰，对外完全不可见
+- 抽象类型，这是默认的可见性，无需额外修饰。对外只有名字可见，类型的内部表示不可见。这种设计防止了意外暴露实现细节
+- 只读类型，用 `pub(readonly)` 修饰，其内部表示对外可见，但外部只能读取类型的值，不能构造或修改
+- 公开类型，用 `pub(all)` 修饰，外部可以自由构造、修改、读取这些类型的值
 
-```moonbit
-struct R1 {       // 默认为抽象数据类型
-  x: Int          // 隐式的私有字段
-  pub y: Int      // ERROR: 在抽象类型中找到了 `pub` 字段！
-  priv z: Int     // WARNING: `priv` 是多余的！
-}
+目前，`pub` 修饰符的语义是 `pub(all)`，但未来 `pub` 的语义会调整为 `pub(readonly)`。
+除了类型自身的可见性，一个 `pub(readonly)` 或 `pub(all)` 的结构体的字段可以额外用 `priv` 修饰，
+这样能对外完全隐藏这一字段的存在。
+注意含有私有字段的结构体在外部无法直接构造，但可以用结构体更新语法更新公开的字段。
 
-pub struct R2 {       // 显式的公共结构
-  x: Int              // 隐式的公共字段
-  pub y: Int          // WARNING: `pub` 是多余的！
-  priv z: Int         // 显式的私有字段
-}
-
-priv struct R3 {       // 显式的私有结构
-  x: Int               // 隐式的私有字段
-  pub y: Int           // ERROR: `pub` 字段出现在了私有类型中！
-  priv z: Int          // WARNING: `priv` 是多余的！
-}
-
-enum T1 {       // 默认为抽象数据类型
-  A(Int)        // 隐式的私有变体
-  pub B(Int)    // ERROR: 无独立可见性！
-  priv C(Int)   // ERROR: 无独立可见性！
-}
-
-pub enum T2 {       // 显式的公共枚举
-  A(Int)            // 隐式的公共变体
-  pub B(Int)        // ERROR: 无独立可见性！
-  priv C(Int)       // ERROR: 无独立可见性！
-}
-
-priv enum T3 {       // 显式的私有枚举
-  A(Int)             // 隐式的私有变体
-  pub B(Int)         // ERROR: 无独立可见性！
-  priv C(Int)        // ERROR: 无独立可见性！
-}
-```
-
-MoonBit 中另一个有用的特性是 `pub(readonly)` 类型，其受到了 OCaml [private types](https://v2.ocaml.org/manual/privatetypes.html)的启发。简而言之，`pub(readonly)` 类型的值可以使用模式匹配或点语法析构，但在其他包中，不能被构造或改变。注意到在 `pub(readonly)` 类型定义的同一个包中，它没有任何限制。
+只读类型是一个十分实用的特性，其受到了 OCaml [private types](https://v2.ocaml.org/manual/privatetypes.html)的启发。简而言之，`pub(readonly)` 类型的值可以使用模式匹配或点语法析构，但在其他包中，不能被构造或改变。注意到在 `pub(readonly)` 类型定义的同一个包中，它没有任何限制。
 
 ```moonbit
 // Package A
@@ -1724,7 +1836,7 @@ pub fn length[A](self : MyList[A]) -> Int {
   self.elems.length()
 }
 
-pub fn op_as_view[A](self : MyList[A], ~start : Int, ~end : Int) -> MyListView[A] {
+pub fn op_as_view[A](self : MyList[A], start~ : Int, end~ : Int) -> MyListView[A] {
   println("op_as_view: [\{start},\{end})")
   if start < 0 || end > self.length() { abort("index out of bounds") }
   { ls: self, start, end }
@@ -1761,23 +1873,48 @@ trait I {
 
 在接口声明中，`Self` 指代实现接口的那个类型。
 
-一个类型要实现某个接口，就要满足该接口中所有的方法。例如，下面的接口描述了一个能够比较元素是否相等的类型需要满足的方法：
 
-```moonbit
-trait Eq {
-  op_equal(Self, Self) -> Bool
-}
-```
-
-接口无需显式实现，具有所需方法的类型会自动实现接口。考虑以下接口：
+一个类型要实现某个接口，就要满足该接口中所有的方法。Trait 中的方法可以用 `impl Trait for Type with method_name(...)` 的形式实现，例如：
 
 ```moonbit
 trait Show {
   to_string(Self) -> String
 }
+
+struct MyType { ... }
+impl Show for MyType with to_string(self) { ... }
+
+// 带类型参数的 trait 实现。
+// [X : Show] 表示类型参数 X 必须实现 Show，后面会详细介绍其含义
+impl[X : Show] Show for Array[X] with to_string(self) { ... }
 ```
 
-内置类型如 `Int` 和 `Double` 会自动实现这个接口。
+`impl` 上可以省略类型标注：MoonBit 会从 `Trait::method` 的签名和  `impl Trait for Type` 中的 `Type` 自动推断出实现的类型。
+
+```moonbit
+trait I {
+  f(Self) -> Unit
+  f_twice(Self) -> Unit
+}
+
+impl I with f_twice(self) {
+  self.f()
+  self.f()
+}
+```
+
+接口 `I` 的实现者无需为 `f_twice` 提供实现，只需要实现方法 `f` 即可实现接口 `I`。但如果有需要，实现者永远可以用显式的 `impl I for Type with f_twice` 声明来覆盖掉默认实现。
+
+如果在尝试寻找某个接口中的方法的实现时，没有找到任何显式的 `impl` 声明，MoonBit 会尝试用目标类型的普通方法作为实现。
+这允许一个类型隐式地实现接口，从而让两个包可以在互不依赖的情况下模块化地一起工作。
+例如，内建的数字类型 `Int`、`Double` 等会自动实现下面的接口：
+
+```moonbit
+trait Number {
+  op_add(Self, Self) -> Self
+  op_mul(Self, Self) -> Self
+}
+```
 
 在声明泛型函数时，类型参数可以用它们应该实现的接口作为注解。
 如此便能定义只对某些类型可用的泛型函数。例如：
@@ -1817,22 +1954,12 @@ struct Point {
   y: Int
 } derive(Show)
 
-fn op_add(self: Point, other: Point) -> Point {
-  { x: self.x + other.x, y: self.y + other.y }
+impl Number for Point with op_add(p1, p2) {
+  { x: p1.x + p2.x, y: p1.y + p2.y }
 }
 
-fn op_mul(self: Point, other: Point) -> Point {
-  { x: self.x * other.x, y: self.y * other.y }
-}
-```
-
-接口中的方法可以用 `Trait::method` 的语法来直接调用。MoonBit 会推导 `Self` 的具体类型，
-并检查 `Self` 是否实现了 `Trait`：
-
-```moonbit
-fn main {
-  println(Show::to_string(42))
-  println(Compare::compare(1.0, 2.5))
+impl Number for Point with op_mul(p1, p2) {
+  { x: p1.x * p2.x, y: p1.y * p2.y }
 }
 ```
 
@@ -1863,48 +1990,101 @@ trait Default {
 }
 ```
 
+### 直接调用接口中的方法
+接口中的方法可以用 `Trait::method` 的语法来直接调用。MoonBit 会推导 `Self` 的具体类型，
+并检查 `Self` 是否实现了 `Trait`：
+
+```moonbit
+fn main {
+  println(Show::to_string(42))
+  println(Compare::compare(1.0, 2.5))
+}
+```
+
+此外，接口的实现也可以用 `.` 语法在实现接口的类型上调用，不过用 `.` 语法调用接口的实现需要满足一些限制：
+
+1. 如果目标类型有一个同名的普通方法，普通方法永远会被优先调用
+2. 只有定义在类型所在的包里的实现可以用 `.` 语法调用
+   - 如果有多个（来自不同接口的）同名实现，用 `.` 调用会触发一个歧义错误
+3. 如果上述两条规则都没有找到任何实现，MoonBit 会搜索当前包内的接口实现。这允许局部地拓展一个来自外部的类型
+   - 但这些实现即使是公开的，也只能在当前包里本地地调用。对外它们无法用 `.` 语法调用
+
+上述规则保证了 MoonBit 的 `.` 语法在灵活的同时具有良好的性质。例如，添加一个新的依赖永远不会导致现有的代码由于 `.` 语法的歧义而报错。这些规则还使得 MoonBit 的名字解析规则非常简单：用 `.` 调用的方法一定来自当前包或目标类型所属的包。
+
+下面是一个用 `.` 语法调用接口实现的例子：
+
+```moonbit
+struct MyType { ... }
+
+impl Show for MyType with ...
+
+fn main {
+  let x : MyType = ...
+  println(x.to_string()) // ok
+}
+```
+
 ## 方法的访问权限控制、直接实现接口
 
 为了使 MoonBit 的接口系统具有一致性（coherence，即任何 `Type: Trait` 的组合都有全局唯一的实现），
-防止第三方包意外地修改现有程序的行为，**只有类型所在的包能为它定义方法**。
-所以用户无法为内建类型或来自第三方包的类型定义方法。
+防止第三方包意外地修改现有程序的行为，MoonBit 对 “谁能给类型添加新的方法/接口实现” 有如下限制：
 
-然而，我们有时也会需要给一个现有类型实现新的接口，因此，MoonBit 允许不定义方法直接实现一个接口。
-这种接口实现的语法是 `impl Trait for Type with method_name(...) { ... }`。
-MoonBit 可以根据接口的签名自动推导出实现的参数和返回值的类型，因此实现不强制要求标注类型。
-例如，假设要为内建类型实现一个新的接口 `ToMyBinaryProtocol`，就可以（且必须）使用 `impl`：
+- **只有类型所在的包能为它定义方法**。所以用户无法为内建类型或来自第三方包的类型定义方法。
+- **只有类型或接口所在的包可以定义 `impl`**。例如，只有 `@pkg1` 和 `@pkg2` 能定义 `impl @pkg1.Trait for @pkg2.Type`
+
+第二条规则允许用户通过定义新接口来拓展一个第三方类型的功能。这些规则使得 MoonBit 的接口系统在具有灵活表达能力的同时享受良好的一致性。
+
+## 接口的可见性与封闭的接口
+MoonBit 中，接口和类型一样有四种可见性：私有、抽象、只读和完全公开。
+私有接口可以用 `priv trait` 声明，它们在外部是完全不可见的。
+抽象接口是接口的默认可见性。只有接口的名字对外可见，接口中的方法对外是不可见的。
+只读接口可以用 `pub(readonly) trait` 声明，外部可以调用这个接口中的方法，但只有定义这个接口的包可以实现这个接口，外部不能添加新的实现。
+最后，完全公开的接口可以用 `pub(open) trait` 声明，外部可以给这种接口添加新的实现、也可以自由调用其中的方法。
+目前，`pub trait` 默认的语义是 `pub(open) trait`。但未来 `pub trait` 的语义会迁移至 `pub(readonly) trait`。
+
+抽象和只读的接口是 **封闭** 的，因为只有定义接口的包可以为它们添加实现。
+如果尝试在外部实现这些接口，就会产生编译错误。
+如果你是一个封闭接口的所有者，并希望你的用户能够使用你提供的、这些接口的实现，
+那么一定要保证你的包中至少有一处形如 `impl Trait for Type with ...` 的显式声明。
+也就是说，只有普通方法和默认实现的情况下，封闭接口的实现在外部是不可用的。
+
+下面是一个抽象接口的例子：
 
 ```moonbit
-trait ToMyBinaryProtocol {
-  to_my_binary_protocol(Self, Buffer) -> Unit
+trait Number {
+ op_add(Self, Self) -> Self
+ op_sub(Self, Self) -> Self
 }
 
-impl ToMyBinaryProtocol for Int with to_my_binary_protocol(x, b) { ... }
-impl ToMyBinaryProtocol for Int with to_my_binary_protocol(x, b) { ... }
-impl ToMyBinaryProtocol for Int with to_my_binary_protocol(x, b) { ... }
-impl[X : ToMyBinaryProtocol] for Array[X] with to_my_binary_protocol(arr, b) { ... }
+fn add[N : Number](x : X, y: X) -> X {
+  Number::op_add(x, y)
+}
+
+fn sub[N : Number](x : X, y: X) -> X {
+  Number::op_sub(x, y)
+}
+
+impl Number for Int with op_add(x, y) { x + y }
+impl Number for Int with op_sub(x, y) { x - y }
+
+impl Number for Double with op_add(x, y) { x + y }
+impl Number for Double with op_sub(x, y) { x - y }
 ```
 
-在搜索某个接口的实现时，`impl` 比普通方法有更高的优先级，
-因此 `impl` 还可以用来覆盖掉行为不能满足要求的现有方法。
-`impl` 只能被用于实现指定的接口，不能像普通的方法一样被直接调用。
-此外，**只有类型或接口所在的包可以定义 `impl`**。
-例如，只有 `@pkg1` 和 `@pkg2` 能定义 `impl @pkg1.Trait for @pkg2.Type with ...`。
-这一限制使得 MoonBit 的接口系统在加入 `impl` 后，仍能保持一致。
+在当前包外，用户只能看见下面的内容：
 
-如果需要直接调用一个实现，可以使用 `Trait::method` 语法。例如：
+```moonbit
+trait Number
 
-```moonbit live
-trait MyTrait {
-  f(Self) -> Unit
-}
+fn op_add[N : Number](x : N, y : N) -> N
+fn op_sub[N : Number](x : N, y : N) -> N
 
-impl MyTrait for Int with f(self) { println("Got Int \{self}!") }
-
-fn main {
-  MyTrait::f(42)
-}
+impl Number for Int
+impl Number for Double
 ```
+
+由于外部不能给 `Number` 添加新的实现。因此，只有 `Int` 和 `Double` 能够实现 `Number`。
+`Number` 的作者可以在编写程序时利用上这一事实。
 
 ## 自动实现内建接口
 
@@ -1943,7 +2123,7 @@ trait Animal {
 type Duck String
 fn Duck::make(name: String) -> Duck { Duck(name) }
 fn speak(self: Duck) -> Unit {
-  println(self.0 + ": quack!")
+  println(self._ + ": quack!")
 }
 
 type Fox String
@@ -2060,6 +2240,18 @@ fn reverse[T](xs : Array[T]) -> Array[T] {
     div(x, y) |> ignore // warning: Div will cause an error when y is zero
   }
   ```
+
+## 特殊语法
+
+### TODO 语法
+
+MoonBit 提供了 `TODO` 语法（`...`），用于标记未完成的代码块。例如：
+
+```moonbit
+fn todo_in_func() -> Int {
+  ...
+}
+```
 
 ## MoonBit 的构建系统
 
