@@ -52,7 +52,7 @@
   "dependencies": {
     "@shikijs/transformers": "^1.10.3",
     "hast-util-to-string": "^3.0.0",
-    "shiki": "^1.10.3",
+    "shiki": "^1.29.2",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0"
   },
